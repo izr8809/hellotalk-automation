@@ -1,0 +1,313 @@
+{
+  "user_initiated": {
+    "greeting": {
+      "keywords": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "what's up", "sup", "yo"],
+      "response": "Hi! Nice to meet you! I'm Jake. How long have you been learning Korean?",
+      "next_message_index": 1,
+      "description": "User starts with greeting"
+    },
+    "ask_question": {
+      "keywords": ["how are you", "how's it going", "what do you do", "where are you from", "what's your name"],
+      "response": "Hi! I'm Jake. I help people learn Korean. How long have you been learning?",
+      "next_message_index": 1,
+      "description": "User asks a question"
+    },
+    "korean_learning": {
+      "keywords": ["korean", "learning", "study", "studying", "language", "grammar", "pronunciation"],
+      "response": "Oh cool! You're learning Korean? How long have you been learning?",
+      "next_message_index": 1,
+      "description": "User mentions Korean learning"
+    },
+    "general": {
+      "keywords": [],
+      "response": "Hi! Nice to meet you! I'm Jake. Are you learning Korean?",
+      "next_message_index": 0,
+      "description": "Generic user-initiated message"
+    }
+  },
+  "message_flow": {
+    "0": {
+      "message": "Hi, I'm jake, how long have you been learning Korean?",
+      "expected_responses": {
+        "duration_answer": {
+          "keywords": ["month", "year", "week", "day", "days", "since", "for", "just started", "beginner", "recently", "long time", "while", "not long", "few words", "little bit", "just 2", "just 3", "couple"],
+          "next_message_index": 1,
+          "description": "User provides duration of learning"
+        },
+        "self_introduction": {
+          "keywords": ["i'm", "my name is", "call me", "i am"],
+          "next_message_index": 1,
+          "alternative_message": "Nice to meet you! So what is the hardest part for you?",
+          "description": "User introduces themselves"
+        },
+        "other_language": {
+          "keywords": ["français", "español", "deutsch", "中文", "日本語", "parle", "hablo", "spreche"],
+          "next_message_index": 1,
+          "alternative_message": "Sorry, I only speak English. Are you learning Korean? What's the hardest part?",
+          "description": "User responds in another language"
+        },
+        "no_learning": {
+          "keywords": ["not learning", "don't learn", "not yet", "haven't started", "not studying"],
+          "next_message_index": 2,
+          "alternative_message": "Oh! Are you interested in learning Korean?",
+          "description": "User is not learning Korean"
+        },
+        "just_greeting": {
+          "keywords": ["hi", "hello", "hey", "good", "nice to meet", "helloo", "hiii", "heyy"],
+          "next_message_index": 1,
+          "description": "User just responds with greeting"
+        },
+        "ask_about_me": {
+          "keywords": ["you", "how about you", "and you", "what about"],
+          "next_message_index": 1,
+          "alternative_message": "I've been helping Korean learners for a while! what is the hardest part for you?",
+          "description": "User asks back about me"
+        }
+      }
+    },
+    "1": {
+      "message": "what is the hardest part?",
+      "expected_responses": {
+        "specific_difficulty": {
+          "keywords": ["grammar", "pronunciation", "listening", "speaking", "reading", "writing", "vocabulary", "particles", "verb", "hard", "difficult", "batchim", "diphthong", "memorizing", "time", "getting time"],
+          "next_message_index": 2,
+          "description": "User mentions specific difficulty"
+        },
+        "ask_for_help": {
+          "keywords": ["where do i start", "can u help", "help me", "teach me", "show me"],
+          "next_message_index": 2,
+          "alternative_message": "I'd love to help! That's why I built an app for Korean learners. But first, what do you do for a living?",
+          "description": "User asks for help learning"
+        },
+        "nonsense_reply": {
+          "keywords": ["ㅇ", "ㅋ", "ㅎ", "...", "???"],
+          "next_message_index": 2,
+          "alternative_message": "Haha okay! So what do you do for a living?",
+          "description": "User sends unclear response"
+        },
+        "no_difficulty": {
+          "keywords": ["not hard", "easy", "no problem", "fine", "okay", "not difficult"],
+          "next_message_index": 2,
+          "alternative_message": "That's great! what do you do for a living?",
+          "description": "User finds it easy"
+        },
+        "everything": {
+          "keywords": ["everything", "all", "all of it", "every part"],
+          "next_message_index": 2,
+          "alternative_message": "I understand, Korean can be challenging! what do you do for a living?",
+          "description": "User finds everything difficult"
+        },
+        "skip_question": {
+          "keywords": ["don't know", "not sure", "idk", "dunno"],
+          "next_message_index": 2,
+          "description": "User is not sure"
+        }
+      }
+    },
+    "2": {
+      "message": "what do you do for a living?",
+      "expected_responses": {
+        "job_answer": {
+          "keywords": ["student", "work", "teacher", "engineer", "doctor", "nurse", "designer", "developer", "artist", "business", "study", "studying", "therapist", "office", "hr", "army", "military"],
+          "next_message_index": 3,
+          "description": "User provides occupation"
+        },
+        "unemployed": {
+          "keywords": ["unemployed", "looking for job", "job searching", "between jobs", "not working"],
+          "next_message_index": 3,
+          "description": "User is unemployed"
+        },
+        "private": {
+          "keywords": ["private", "don't want to say", "personal", "rather not"],
+          "next_message_index": 3,
+          "alternative_message": "No problem! I'm building an app to help people learn Korean more easily. You can practice pronunciation for free.",
+          "description": "User doesn't want to share"
+        },
+        "ask_back": {
+          "keywords": ["you", "what about you", "how about you"],
+          "next_message_index": 3,
+          "alternative_message": "I'm working on language learning technology! Speaking of which, I'm building an app to help people learn Korean more easily. You can practice pronunciation for free.",
+          "description": "User asks about my occupation"
+        }
+      }
+    },
+    "3": {
+      "message": "I'm building an app to help people learn Korean more easily.You can practice pronunciation for free.",
+      "expected_responses": {
+        "interested": {
+          "keywords": ["cool", "awesome", "great", "nice", "interesting", "sounds good", "wow", "amazing"],
+          "next_message_index": 4,
+          "description": "User shows interest"
+        },
+        "ask_details": {
+          "keywords": ["how", "what", "tell me more", "explain", "details", "feature", "work"],
+          "next_message_index": 4,
+          "alternative_message": "Do u mind giving me some feedback as learner? It will be big help! You can try the features and see how it works.",
+          "description": "User asks for more details"
+        },
+        "not_interested": {
+          "keywords": ["not interested", "no thanks", "not now", "busy", "maybe later"],
+          "next_message_index": 5,
+          "alternative_message": "No problem! If you change your mind later, you can search 'kokoai' on app store. Have a great day!",
+          "skip_to_end": true,
+          "description": "User is not interested"
+        },
+        "skeptical": {
+          "keywords": ["really", "sure", "doubt", "hmm", "maybe", "not sure"],
+          "next_message_index": 4,
+          "alternative_message": "I understand! That's why I'd love your feedback. Do u mind giving it a try and telling me what you think?",
+          "description": "User is skeptical"
+        }
+      }
+    },
+    "4": {
+      "message": "Do u mind giving me some feedback as learner? It will be big help!",
+      "expected_responses": {
+        "agree_feedback": {
+          "keywords": ["yes", "sure", "okay", "ok", "of course", "no problem", "happy to", "glad to", "will do"],
+          "next_message_index": 5,
+          "description": "User agrees to give feedback"
+        },
+        "ask_how": {
+          "keywords": ["how", "where", "what do i do", "link", "download"],
+          "next_message_index": 5,
+          "description": "User asks how to access"
+        },
+        "refuse_politely": {
+          "keywords": ["busy", "not now", "later", "no time", "maybe another time"],
+          "next_message_index": 5,
+          "alternative_message": "No worries! You can search 'kokoai' on app store whenever you have time. Thanks for chatting!",
+          "skip_to_end": true,
+          "description": "User refuses politely"
+        },
+        "refuse_directly": {
+          "keywords": ["no", "nah", "not interested", "don't want"],
+          "next_message_index": 5,
+          "alternative_message": "No problem! Have a great day!",
+          "skip_to_end": true,
+          "description": "User refuses directly"
+        }
+      }
+    },
+    "5": {
+      "message": "u can search 'kokoai' on app store.! try it and tell me what you think!",
+      "expected_responses": {
+        "will_try": {
+          "keywords": ["will", "gonna", "sure", "ok", "thanks", "thank you", "downloaded", "downloading"],
+          "next_message_index": 6,
+          "alternative_message": "Awesome! Thanks so much! Let me know what you think after trying it!",
+          "description": "User will try the app"
+        },
+        "already_downloaded": {
+          "keywords": ["already", "downloaded", "have it", "got it", "installed"],
+          "next_message_index": 7,
+          "alternative_message": "Great! Let me know what you think! Any feedback would be really helpful!",
+          "description": "User already has the app"
+        },
+        "cant_find": {
+          "keywords": ["can't find", "cannot find", "not found", "doesn't show", "no result"],
+          "next_message_index": 6,
+          "alternative_message": "Try searching 'koko ai' or 'korean pronunciation' - it should come up! Let me know if you still can't find it.",
+          "description": "User can't find the app"
+        },
+        "simple_acknowledgment": {
+          "keywords": ["ok", "okay", "alright", "cool", "got it", "👍", "👌"],
+          "next_message_index": 6,
+          "alternative_message": "Thanks! Looking forward to your feedback!",
+          "description": "User simply acknowledges"
+        }
+      }
+    },
+    "6": {
+      "message": "Did you get a chance to try it? Would love to hear your thoughts!",
+      "expected_responses": {
+        "tried_positive": {
+          "keywords": ["yes", "tried", "used", "like", "love", "good", "great", "helpful", "useful", "nice"],
+          "next_message_index": 7,
+          "description": "User tried and has positive feedback"
+        },
+        "tried_negative": {
+          "keywords": ["tried", "not good", "didn't like", "confusing", "hard to use", "doesn't work"],
+          "next_message_index": 7,
+          "alternative_message": "Thanks for trying it! I'd really appreciate if you could share what didn't work well. That's awesome! What did you think of it? Any features you particularly liked or found useful?",
+          "description": "User tried but has negative feedback",
+          "save_feedback": true
+        },
+        "not_yet": {
+          "keywords": ["not yet", "haven't", "didn't try", "forgot", "busy", "later"],
+          "next_message_index": 6,
+          "alternative_message": "No worries! Whenever you get a chance, I'd love to hear what you think!",
+          "description": "User hasn't tried yet"
+        },
+        "cant_find_still": {
+          "keywords": ["still can't", "couldn't find", "not available", "not in store"],
+          "next_message_index": -1,
+          "alternative_message": "I'm sorry about that! Can you tell me what country's app store you're using? That would help me figure out the issue.",
+          "description": "User still can't find the app",
+          "save_feedback": true
+        },
+        "lost_interest": {
+          "keywords": ["not interested anymore", "changed mind", "don't want", "no thanks"],
+          "next_message_index": -1,
+          "alternative_message": "No problem! Thanks for your time anyway. Have a great day!",
+          "skip_to_end": true,
+          "description": "User lost interest"
+        }
+      }
+    },
+    "7": {
+      "message": "That's awesome! What did you think of it? Any features you particularly liked or found useful?",
+      "expected_responses": {
+        "detailed_feedback": {
+          "keywords": ["pronunciation", "practice", "voice", "speaking", "lesson", "recording", "feedback", "feature", "ui", "interface"],
+          "next_message_index": -1,
+          "alternative_message": "Thank you so much for the detailed feedback! This is incredibly helpful. I really appreciate you taking the time to try it and share your thoughts!",
+          "description": "User provides detailed feedback",
+          "save_feedback": true
+        },
+        "general_positive": {
+          "keywords": ["good", "like", "great", "helpful", "useful", "nice", "easy", "simple"],
+          "next_message_index": -1,
+          "alternative_message": "Awesome! So glad you found it helpful! If you think of any specific suggestions, feel free to let me know anytime. Thanks again!",
+          "description": "User gives general positive feedback",
+          "save_feedback": true
+        },
+        "mixed_feedback": {
+          "keywords": ["but", "however", "although", "except", "could be better", "wish"],
+          "next_message_index": -1,
+          "alternative_message": "Thanks for the honest feedback! I really appreciate both the positive points and suggestions for improvement. This helps a lot!",
+          "description": "User gives mixed feedback",
+          "save_feedback": true
+        },
+        "vague_response": {
+          "keywords": ["ok", "fine", "alright", "decent", "not bad"],
+          "next_message_index": -1,
+          "alternative_message": "Thanks for trying it! If you have any specific thoughts or suggestions later, I'd love to hear them. Appreciate your time!",
+          "description": "User gives vague feedback",
+          "save_feedback": true
+        },
+        "needs_help": {
+          "keywords": ["how", "confused", "don't understand", "help", "question", "what does"],
+          "next_message_index": -1,
+          "alternative_message": "Of course! I'd be happy to help. What specifically are you having trouble with?",
+          "description": "User needs help using the app"
+        }
+      }
+    }
+  },
+  "fallback_responses": {
+    "confused": {
+      "keywords": ["what", "huh", "sorry", "don't understand", "confused"],
+      "response": "Sorry if I wasn't clear! I'm just asking about your Korean learning experience."
+    },
+    "off_topic": {
+      "keywords": ["weather", "food", "movie", "music", "game"],
+      "response": "Haha that's interesting! But let me get back to my question - "
+    },
+    "inappropriate": {
+      "keywords": ["spam", "buy", "sell", "promotion", "link", "click here"],
+      "response": "I'm just trying to have a genuine conversation about language learning.",
+      "flag_user": true
+    }
+  }
+}

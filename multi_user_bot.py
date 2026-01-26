@@ -4,6 +4,7 @@ import time
 import json
 from playwright.sync_api import sync_playwright
 from datetime import datetime
+from response_handler import ResponseHandler
 
 class HelloTalkBot:
     def __init__(self):
@@ -11,9 +12,8 @@ class HelloTalkBot:
         self.exclude_users = set()
         self.user_states = {}
         self.page = None
-        self.daily_limit = 20
-        self.today_started = 0
         self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.response_handler = ResponseHandler()
         
     def load_messages(self, file_path="messages.txt"):
         try:
@@ -40,7 +40,6 @@ class HelloTalkBot:
         state_file = "bot_state.json"
         state_data = {
             'user_states': self.user_states,
-            'today_started': self.today_started,
             'current_date': self.current_date
         }
         with open(state_file, 'w', encoding='utf-8') as f:
@@ -54,16 +53,7 @@ class HelloTalkBot:
             
             if isinstance(state_data, dict) and 'user_states' in state_data:
                 self.user_states = state_data['user_states']
-                saved_date = state_data.get('current_date', '')
-                
-                if saved_date == self.current_date:
-                    self.today_started = state_data.get('today_started', 0)
-                    print(f"✓ 이전 상태 로드: {len(self.user_states)}명 진행 중")
-                    print(f"✓ 오늘 시작한 대화: {self.today_started}/{self.daily_limit}명")
-                else:
-                    self.today_started = 0
-                    print(f"✓ 이전 상태 로드: {len(self.user_states)}명 진행 중")
-                    print(f"✓ 새로운 날! 오늘 제한: {self.daily_limit}명")
+                print(f"✓ 이전 상태 로드: {len(self.user_states)}명 진행 중")
             else:
                 self.user_states = state_data
                 print(f"✓ 이전 상태 로드: {len(self.user_states)}명 진행 중")
@@ -166,12 +156,50 @@ class HelloTalkBot:
         
         return []
     
-    def has_reply_after_my_last_message(self):
+    def get_all_new_received_messages(self, username):
         try:
             all_messages = self.page.query_selector_all('.msgItemBigWrapper')
             
             if not all_messages:
-                return False
+                return []
+            
+            my_last_idx = -1
+            for idx, msg in enumerate(all_messages):
+                if 'sendBox' in msg.get_attribute('class'):
+                    my_last_idx = idx
+            
+            new_messages = []
+            state = self.user_states.get(username, {})
+            processed_msgs = set(state.get('messages_processed', []))
+            
+            start_idx = my_last_idx + 1 if my_last_idx >= 0 else 0
+            
+            for idx in range(start_idx, len(all_messages)):
+                msg = all_messages[idx]
+                if 'receiveBox' in msg.get_attribute('class'):
+                    text_wrapper = msg.query_selector('.textWrapper pre')
+                    if text_wrapper:
+                        text = text_wrapper.inner_text().strip()
+                        msg_hash = f"{username}:{idx}:{text[:30]}"
+                        
+                        if msg_hash not in processed_msgs:
+                            new_messages.append({
+                                'text': text,
+                                'hash': msg_hash,
+                                'index': idx
+                            })
+            
+            return new_messages
+        except Exception as e:
+            print(f"      ⚠️  메시지 확인 실패: {e}")
+            return []
+    
+    def get_last_received_message(self):
+        try:
+            all_messages = self.page.query_selector_all('.msgItemBigWrapper')
+            
+            if not all_messages:
+                return None
             
             my_last_idx = -1
             for idx, msg in enumerate(all_messages):
@@ -179,16 +207,46 @@ class HelloTalkBot:
                     my_last_idx = idx
             
             if my_last_idx == -1:
-                return False
+                return None
             
             for idx in range(my_last_idx + 1, len(all_messages)):
-                if 'receiveBox' in all_messages[idx].get_attribute('class'):
-                    return True
+                msg = all_messages[idx]
+                if 'receiveBox' in msg.get_attribute('class'):
+                    text_wrapper = msg.query_selector('.textWrapper pre')
+                    if text_wrapper:
+                        return text_wrapper.inner_text().strip()
             
-            return False
+            return None
         except Exception as e:
             print(f"      ⚠️  답장 확인 실패: {e}")
-            return False
+            return None
+    
+    def has_reply_after_my_last_message(self):
+        return self.get_last_received_message() is not None
+    
+    def detect_user_initiated_conversation(self):
+        try:
+            all_messages = self.page.query_selector_all('.msgItemBigWrapper')
+            
+            if not all_messages:
+                return False, None
+            
+            has_bot_message = False
+            first_user_message = None
+            
+            for msg in all_messages:
+                if 'sendBox' in msg.get_attribute('class'):
+                    has_bot_message = True
+                    break
+                elif 'receiveBox' in msg.get_attribute('class') and first_user_message is None:
+                    text_wrapper = msg.query_selector('.textWrapper pre')
+                    if text_wrapper:
+                        first_user_message = text_wrapper.inner_text().strip()
+            
+            return not has_bot_message and first_user_message is not None, first_user_message
+        except Exception as e:
+            print(f"      ⚠️  대화 감지 실패: {e}")
+            return False, None
     
     def send_message(self, message):
         try:
@@ -259,7 +317,9 @@ class HelloTalkBot:
         if username not in self.user_states:
             self.user_states[username] = {
                 'current_step': max(0, last_msg_idx + 1),
-                'completed': False
+                'completed': False,
+                'last_check_time': datetime.now().isoformat(),
+                'messages_processed': []
             }
             
             if last_msg_idx >= 0:
@@ -276,36 +336,129 @@ class HelloTalkBot:
         if state['completed']:
             return False
         
-        if state['current_step'] == 0:
-            if self.today_started >= self.daily_limit:
-                print(f"   ⚠️  오늘 제한 도달 ({self.daily_limit}명), 내일 다시 시도")
-                return False
+        new_messages = self.get_all_new_received_messages(username)
+        
+        if state['current_step'] == 0 and new_messages:
+            first_msg_text = new_messages[0]['text']
+            print(f"   🔍 첫 메시지 감지됨: \"{first_msg_text[:50]}...\"")
             
-            print(f"   📤 첫 메시지 전송: {username} (오늘 {self.today_started + 1}/{self.daily_limit})")
-            success = self.send_message(self.messages[0])
+            difficulty_keywords = ["grammar", "pronunciation", "listening", "speaking", "reading", "writing", 
+                                 "vocabulary", "particles", "verb", "hard", "difficult", "batchim", "diphthong", 
+                                 "memorizing", "time", "getting time", "where do i start", "can u help", "help me"]
+            
+            mentions_difficulty = any(keyword in first_msg_text.lower() for keyword in difficulty_keywords)
+            
+            if mentions_difficulty:
+                print(f"   ⚠️  이미 어려움 언급 → 이전 대화 있었음 추정")
+                print(f"   ⏩ 바로 2단계(직업 질문)로 진입")
+                
+                next_step, alt_msg, _ = self.response_handler.analyze_response(
+                    first_msg_text, 1, username, self.messages[1]
+                )
+                
+                if alt_msg:
+                    response = alt_msg
+                elif next_step is not None and next_step < len(self.messages):
+                    response = self.messages[next_step]
+                else:
+                    response = self.messages[2]
+                
+                success = self.send_message(response)
+                if success:
+                    state['current_step'] = 3
+                    state['messages_processed'].append(new_messages[0]['hash'])
+                    state['last_check_time'] = datetime.now().isoformat()
+                    self.save_state()
+                    return True
+        
+        user_initiated, first_msg = self.detect_user_initiated_conversation()
+        
+        if user_initiated and state['current_step'] == 0 and not new_messages:
+            print(f"   🆕 유저가 먼저 대화 시작: \"{first_msg[:50]}...\"")
+            response, next_idx = self.response_handler.analyze_user_initiated_message(first_msg)
+            print(f"   📤 적절한 첫 응답 전송")
+            success = self.send_message(response)
             if success:
-                state['current_step'] = 1
-                self.today_started += 1
+                state['current_step'] = next_idx + 1
+                state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
                 self.save_state()
                 return True
         
-        elif has_new_reply:
-            print(f"   ✓ 마지막 메시지 이후 답장 확인!")
+        if state['current_step'] == 0 and not user_initiated and not new_messages:
+            print(f"   📤 첫 메시지 전송: {username}")
+            success = self.send_message(self.messages[0])
+            if success:
+                state['current_step'] = 1
+                state['last_check_time'] = datetime.now().isoformat()
+                self.save_state()
+                return True
+        
+        if new_messages:
+            print(f"   ✓ 새 메시지 {len(new_messages)}개 발견")
+            actions_taken = 0
             
-            if state['current_step'] < len(self.messages):
-                next_message = self.messages[state['current_step']]
-                print(f"   📤 메시지 {state['current_step'] + 1}/{len(self.messages)} 전송")
+            for msg_idx, msg_data in enumerate(new_messages, 1):
+                user_reply = msg_data['text']
+                msg_hash = msg_data['hash']
                 
-                success = self.send_message(next_message)
-                if success:
-                    state['current_step'] += 1
+                print(f"\n   [{msg_idx}/{len(new_messages)}] 메시지 처리:")
+                print(f"      답변: \"{user_reply[:50]}...\"")
+                
+                if state['current_step'] < len(self.messages):
+                    my_last_message = self.messages[state['current_step'] - 1] if state['current_step'] > 0 else ""
                     
-                    if state['current_step'] >= len(self.messages):
+                    next_step, alternative_message, _ = self.response_handler.analyze_response(
+                        user_reply, 
+                        state['current_step'] - 1,
+                        username,
+                        my_last_message
+                    )
+                    
+                    state['messages_processed'].append(msg_hash)
+                    
+                    if next_step == -1:
+                        print(f"      🏁 대화 종료 신호")
+                        if alternative_message:
+                            print(f"      📤 종료 메시지 전송")
+                            self.send_message(alternative_message)
                         state['completed'] = True
-                        print(f"   ✅ {username} 완료!")
+                        state['last_check_time'] = datetime.now().isoformat()
+                        self.save_state()
+                        return True
                     
-                    self.save_state()
-                    return True
+                    if alternative_message:
+                        next_message = alternative_message
+                        print(f"      🔄 대체 메시지 사용")
+                    elif next_step is not None and next_step < len(self.messages):
+                        next_message = self.messages[next_step]
+                    else:
+                        next_message = self.messages[state['current_step']]
+                    
+                    print(f"      📤 응답 전송 (단계: {state['current_step']} → {next_step if next_step is not None else state['current_step'] + 1})")
+                    
+                    success = self.send_message(next_message)
+                    if success:
+                        if next_step is not None:
+                            state['current_step'] = next_step + 1
+                        else:
+                            state['current_step'] += 1
+                        
+                        if state['current_step'] >= len(self.messages):
+                            state['completed'] = True
+                            print(f"      ✅ 대화 완료!")
+                        
+                        actions_taken += 1
+                        
+                        if msg_idx < len(new_messages):
+                            print(f"      ⏸️  다음 메시지 처리 전 3초 대기...")
+                            time.sleep(3)
+            
+            state['last_check_time'] = datetime.now().isoformat()
+            self.save_state()
+            
+            if actions_taken > 0:
+                print(f"   ✅ {actions_taken}개 메시지 처리 완료")
+                return True
         else:
             if state['current_step'] > 0 and state['current_step'] < len(self.messages):
                 print(f"   ⏳ 답장 대기 중... (메시지 {state['current_step']}/{len(self.messages)} 전송 완료)")
@@ -351,8 +504,6 @@ class HelloTalkBot:
             print("🚀 봇 시작!")
             print("=" * 60)
             print(f"전송할 메시지: {len(self.messages)}개")
-            print(f"하루 첫 메시지 제한: {self.daily_limit}명")
-            print(f"오늘 시작한 대화: {self.today_started}/{self.daily_limit}명")
             print(f"체크 간격: 1분")
             print("중단: Ctrl + C\n")
             
@@ -376,47 +527,82 @@ class HelloTalkBot:
                 completed_users = [u for u in all_users if u['name'] in self.user_states and self.user_states[u['name']]['completed']]
                 not_started_yet = [u for u in all_users if u['name'] not in self.user_states]
                 in_progress = [u for u in all_users if u['name'] in self.user_states and not self.user_states[u['name']]['completed']]
+                unread_names = {u['name'] for u in users_with_unread}
                 
-                print(f"읽지 않은 메시지: {len(users_with_unread)}명 | 진행 중: {len(in_progress)}명 | 완료: {len(completed_users)}명 | 오늘 시작: {self.today_started}/{self.daily_limit}")
+                print(f"읽지 않은 메시지: {len(users_with_unread)}명 | 진행 중: {len(in_progress)}명 | 완료: {len(completed_users)}명 | 신규: {len(not_started_yet)}명")
                 
-                if cycle == 1 and self.today_started < self.daily_limit and not_started_yet:
-                    new_to_start = not_started_yet[:self.daily_limit - self.today_started]
-                    print(f"\n🆕 첫 사이클: {len(new_to_start)}명에게 첫 메시지 전송")
+                users_to_check = []
+                users_to_check.extend(not_started_yet)
+                users_to_check.extend(in_progress)
+                
+                if not_started_yet:
+                    print(f"\n🆕 신규 유저: {len(not_started_yet)}명")
+                if in_progress:
+                    print(f"🔄 진행 중: {len(in_progress)}명")
+                
+                if not users_to_check:
+                    print("\n✅ 체크할 유저가 없습니다.")
+                    print(f"\n⏳ 다음 체크까지 60초 대기...")
+                    time.sleep(60)
+                    continue
+                
+                print(f"\n🔄 전체 {len(users_to_check)}명 스윕 시작:")
+                
+                BATCH_SIZE = 30
+                total_actions = 0
+                
+                for batch_num in range(0, len(users_to_check), BATCH_SIZE):
+                    batch = users_to_check[batch_num:batch_num + BATCH_SIZE]
+                    batch_actions = 0
                     
-                    for idx, user in enumerate(new_to_start, 1):
+                    batch_label = f"배치 {batch_num//BATCH_SIZE + 1}/{(len(users_to_check) + BATCH_SIZE - 1)//BATCH_SIZE}"
+                    print(f"\n{'='*60}")
+                    print(f"📦 {batch_label}: {len(batch)}명 처리 중")
+                    print(f"{'='*60}")
+                    
+                    for idx, user in enumerate(batch, 1):
                         username = user['name']
-                        print(f"\n[신규 {idx}/{len(new_to_start)}] {username}")
+                        
+                        is_new = username not in self.user_states
+                        if is_new:
+                            status_label = "🆕 신규"
+                        else:
+                            state = self.user_states.get(username, {'current_step': 0})
+                            has_unread = username in unread_names
+                            unread_indicator = "🔴" if has_unread else "⚪"
+                            status_label = f"{unread_indicator} 진행"
+                        
+                        current_step = self.user_states.get(username, {}).get('current_step', 0)
+                        global_idx = batch_num + idx
+                        print(f"\n[{global_idx}/{len(users_to_check)}] {status_label} | {username} (단계: {current_step}/{len(self.messages)})")
                         
                         try:
-                            self.check_and_send_next_message(user)
+                            action = self.check_and_send_next_message(user)
+                            if action:
+                                batch_actions += 1
                             time.sleep(2)
                         except Exception as e:
                             print(f"   ❌ 오류: {e}")
                             continue
-                
-                if not in_progress:
-                    print("\n✅ 진행 중인 대화가 없습니다.")
-                else:
-                    print(f"\n🔄 진행 중인 {len(in_progress)}명 체크:")
                     
-                    unread_names = {u['name'] for u in users_with_unread}
+                    total_actions += batch_actions
                     
-                    for idx, user in enumerate(in_progress, 1):
-                        username = user['name']
-                        state = self.user_states.get(username, {'current_step': 0})
-                        has_unread = username in unread_names
-                        
-                        unread_indicator = "🔴" if has_unread else "⚪"
-                        print(f"\n[{idx}/{len(in_progress)}] {unread_indicator} {username} (단계: {state['current_step']}/{len(self.messages)})")
-                        
-                        try:
-                            self.check_and_send_next_message(user)
-                            time.sleep(2)
-                        except Exception as e:
-                            print(f"   ❌ 오류: {e}")
-                            continue
+                    print(f"\n{'='*60}")
+                    print(f"✅ {batch_label} 완료: {len(batch)}명 체크, {batch_actions}개 액션")
+                    print(f"{'='*60}")
+                    
+                    if batch_num + BATCH_SIZE < len(users_to_check):
+                        remaining = len(users_to_check) - (batch_num + BATCH_SIZE)
+                        print(f"\n⏸️  잠시 휴식... (남은 유저: {remaining}명)")
+                        print(f"⏳ 30초 후 다음 배치 시작...")
+                        time.sleep(30)
                 
-                print(f"\n⏳ 다음 체크까지 60초 대기...")
+                print(f"\n{'='*60}")
+                print(f"🎉 전체 스윕 완료!")
+                print(f"총 {len(users_to_check)}명 체크, {total_actions}개 액션")
+                print(f"{'='*60}")
+                
+                print(f"\n⏳ 다음 사이클까지 60초 대기...")
                 time.sleep(60)
         
         except KeyboardInterrupt:
