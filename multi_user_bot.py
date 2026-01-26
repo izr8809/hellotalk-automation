@@ -558,7 +558,7 @@ class HelloTalkBot:
             print("🚀 봇 시작!")
             print("=" * 60)
             print(f"전송할 메시지: {len(self.messages)}개")
-            print(f"체크 간격: 1분")
+            print(f"체크 간격: 10분")
             print("중단: Ctrl + C\n")
             
             cycle = 0
@@ -612,8 +612,8 @@ class HelloTalkBot:
                 
                 if not users_to_check:
                     print("\n✅ 체크할 유저가 없습니다.")
-                    print(f"\n⏳ 다음 체크까지 60초 대기...")
-                    time.sleep(60)
+                    print(f"\n⏳ 다음 체크까지 600초 (10분) 대기...")
+                    time.sleep(600)
                     continue
                 
                 print(f"\n🔄 전체 {len(users_to_check)}명 스윕 시작:")
@@ -672,8 +672,8 @@ class HelloTalkBot:
                 print(f"총 {len(users_to_check)}명 체크, {total_actions}개 액션")
                 print(f"{'='*60}")
                 
-                print(f"\n⏳ 다음 사이클까지 60초 대기...")
-                time.sleep(60)
+                print(f"\n⏳ 다음 사이클까지 600초 (10분) 대기...")
+                time.sleep(600)
         
         except KeyboardInterrupt:
             print("\n\n⚠️  사용자가 중단했습니다.")
