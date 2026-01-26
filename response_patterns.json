@@ -304,6 +304,10 @@
     }
   },
   "fallback_responses": {
+    "bot_suspicion": {
+      "keywords": ["are you a bot", "are you real", "bot?", "robot", "fake", "automated", "script", "are you human"],
+      "response": "Haha no I'm real! 😅 Just enthusiastic about helping Korean learners. I built this app myself and trying to get feedback from real learners like you"
+    },
     "confused": {
       "keywords": ["what", "huh", "sorry", "don't understand", "confused"],
       "response": "Sorry if I wasn't clear! I'm just asking about your Korean learning experience."

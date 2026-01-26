@@ -2,6 +2,7 @@
 
 import time
 import json
+import random
 from playwright.sync_api import sync_playwright
 from datetime import datetime
 from response_handler import ResponseHandler
@@ -248,6 +249,31 @@ class HelloTalkBot:
             print(f"      ⚠️  대화 감지 실패: {e}")
             return False, None
     
+    def infer_conversation_step(self, user_message):
+        """
+        유저의 첫 메시지를 분석하여 모바일에서 이미 진행된 대화 단계를 추론
+        HelloTalk 웹은 모바일 히스토리를 보여주지 않으므로, 유저 메시지로 추론 필요
+        """
+        msg_lower = user_message.lower()
+        
+        step_indicators = {
+            0: [],
+            1: ["month", "year", "week", "day", "started", "beginner", "recently", "long time"],
+            2: ["hard", "difficult", "grammar", "pronunciation", "listening", "speaking", "vocabulary"],
+            3: ["student", "work", "teacher", "engineer", "doctor", "designer", "job", "studying"],
+            4: ["sounds good", "tell me more", "how does it work", "explain"],
+            5: ["give feedback", "try it", "check it out", "test it"],
+            6: ["downloaded", "tried it", "installed", "searched", "found it"],
+            7: ["i like", "i love", "really good", "really helpful", "feature", "useful", "what i think"]
+        }
+        
+        matched_step = 0
+        for step, keywords in step_indicators.items():
+            if any(keyword in msg_lower for keyword in keywords):
+                matched_step = max(matched_step, step)
+        
+        return matched_step
+    
     def send_message(self, message):
         try:
             input_selectors = [
@@ -268,10 +294,13 @@ class HelloTalkBot:
             if not input_box:
                 return False
             
+            typing_delay = len(message) * 0.05 + random.uniform(1, 3)
+            time.sleep(typing_delay)
+            
             input_box.fill(message)
-            time.sleep(0.5)
+            time.sleep(random.uniform(0.3, 0.8))
             input_box.press('Enter')
-            time.sleep(1)
+            time.sleep(random.uniform(0.5, 1.5))
             
             return True
             
@@ -284,12 +313,16 @@ class HelloTalkBot:
             my_messages = self.page.query_selector_all('.msgItemBigWrapper.sendBox')
             
             if not my_messages:
+                print(f"      ⚠️  Bot 메시지를 찾을 수 없음 (selector: '.msgItemBigWrapper.sendBox')")
                 return -1
+            
+            print(f"      ℹ️  Bot 메시지 {len(my_messages)}개 발견")
             
             last_msg_container = my_messages[-1]
             text_wrapper = last_msg_container.query_selector('.textWrapper pre')
             
             if not text_wrapper:
+                print(f"      ⚠️  마지막 bot 메시지에서 텍스트를 찾을 수 없음 (selector: '.textWrapper pre')")
                 return -1
             
             last_text = text_wrapper.inner_text().strip()
@@ -297,11 +330,36 @@ class HelloTalkBot:
             
             for idx, template_msg in enumerate(self.messages):
                 template_lower = template_msg.lower()
+                
                 if last_text_lower == template_lower or template_lower in last_text_lower:
-                    print(f"      내가 마지막으로 보낸 메시지: \"{last_text[:50]}...\" (메시지 {idx + 1})")
+                    print(f"      ✓ 마지막 bot 메시지: step {idx}")
                     return idx
             
-            print(f"      ⚠️  마지막 메시지를 템플릿에서 찾을 수 없음: \"{last_text[:50]}...\"")
+            best_match_idx = -1
+            best_match_score = 0
+            
+            for idx, template_msg in enumerate(self.messages):
+                template_words = set(template_msg.lower().split())
+                last_words = set(last_text_lower.split())
+                
+                common_words = template_words & last_words
+                if len(template_words) > 0:
+                    score = len(common_words) / len(template_words)
+                    
+                    if score > best_match_score and score > 0.7:
+                        best_match_score = score
+                        best_match_idx = idx
+            
+            if best_match_idx >= 0:
+                print(f"      ⚠️  부분 매칭: step {best_match_idx} (유사도: {best_match_score:.0%})")
+                return best_match_idx
+            
+            print(f"      ⚠️  마지막 메시지를 템플릿에서 찾을 수 없음:")
+            print(f"      실제 DOM: \"{last_text}\"")
+            print(f"      비교 시도한 템플릿:")
+            for idx, template_msg in enumerate(self.messages):
+                similarity = template_msg.lower() in last_text_lower
+                print(f"        Step {idx}: {'✓' if similarity else '✗'} \"{template_msg[:60]}...\"")
             return -1
         except Exception as e:
             print(f"      ⚠️  메시지 확인 실패: {e}")
@@ -315,6 +373,7 @@ class HelloTalkBot:
         
         if username not in self.user_states:
             self.user_states[username] = {
+                'current_step': 0,
                 'completed': False,
                 'last_check_time': datetime.now().isoformat(),
                 'messages_processed': []
@@ -325,45 +384,56 @@ class HelloTalkBot:
         if state.get('completed'):
             return False
         
-        last_msg_idx = self.get_my_last_message_index()
+        current_step = state.get('current_step', 0)
         
-        if last_msg_idx >= 0:
-            print(f"   ℹ️  마지막 bot 메시지: step {last_msg_idx} - \"{self.messages[last_msg_idx][:50]}...\"")
+        if current_step < 0:
+            current_step = 0
         
-        if last_msg_idx >= len(self.messages) - 1:
+        if current_step >= len(self.messages):
             print(f"   ✅ 모든 메시지 전송 완료")
             state['completed'] = True
             self.save_state()
             return False
         
+        print(f"   ℹ️  현재 step: {current_step}/{len(self.messages)}")
+        
+        if current_step == 0:
+            user_initiated, first_msg = self.detect_user_initiated_conversation()
+            
+            if user_initiated:
+                print(f"   🔍 유저가 먼저 대화 시작: \"{first_msg[:50]}...\"")
+                
+                # 유저의 첫 메시지로 이미 진행된 대화 단계 파악
+                inferred_step = self.infer_conversation_step(first_msg)
+                
+                if inferred_step > 0:
+                    print(f"   ⚡ 모바일 대화 히스토리 감지: Step {inferred_step - 1}까지 진행된 것으로 추정")
+                    print(f"   📤 Step {inferred_step} 메시지부터 시작")
+                    
+                    success = self.send_message(self.messages[inferred_step])
+                    if success:
+                        state['current_step'] = inferred_step + 1
+                        state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
+                        state['last_check_time'] = datetime.now().isoformat()
+                        self.save_state()
+                        return True
+                    return False
+                
+                state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
+            
+            print(f"   📤 Step {current_step} 메시지 전송")
+            success = self.send_message(self.messages[current_step])
+            if success:
+                state['current_step'] = current_step + 1
+                state['last_check_time'] = datetime.now().isoformat()
+                self.save_state()
+                return True
+            return False
+        
         new_messages = self.get_all_new_received_messages(username)
         
-        user_initiated, first_msg = self.detect_user_initiated_conversation()
-        
-        if user_initiated and last_msg_idx == -1:
-            print(f"   🆕 유저가 먼저 대화 시작: \"{first_msg[:50]}...\"")
-            response, next_idx = self.response_handler.analyze_user_initiated_message(first_msg)
-            print(f"   📤 적절한 첫 응답 전송")
-            success = self.send_message(response)
-            if success:
-                state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
-                state['last_check_time'] = datetime.now().isoformat()
-                self.save_state()
-                return True
-            return False
-        
-        if last_msg_idx == -1 and not user_initiated:
-            print(f"   📤 첫 메시지 전송: {username}")
-            success = self.send_message(self.messages[0])
-            if success:
-                state['last_check_time'] = datetime.now().isoformat()
-                self.save_state()
-                return True
-            return False
-        
         if not new_messages:
-            if last_msg_idx >= 0 and last_msg_idx < len(self.messages) - 1:
-                print(f"   ⏳ 답장 대기 중...")
+            print(f"   ⏳ 답장 대기 중...")
             return False
         
         print(f"   ✓ 새 메시지 {len(new_messages)}개 발견")
@@ -376,22 +446,18 @@ class HelloTalkBot:
             print(f"\n   [{msg_idx}/{len(new_messages)}] 메시지 처리:")
             print(f"      답변: \"{user_reply[:50]}...\"")
             
-            current_last_msg_idx = self.get_my_last_message_index()
+            current_step = state.get('current_step', 0)
             
-            if current_last_msg_idx == -1:
-                print(f"      ⚠️  bot 메시지를 찾을 수 없음")
-                continue
-            
-            if current_last_msg_idx >= len(self.messages) - 1:
+            if current_step >= len(self.messages):
                 print(f"      ✅ 이미 모든 메시지 전송 완료")
                 state['completed'] = True
                 break
             
-            my_last_message = self.messages[current_last_msg_idx]
+            my_last_message = self.messages[current_step - 1] if current_step > 0 else ""
             
             next_step, alternative_message, _ = self.response_handler.analyze_response(
                 user_reply, 
-                current_last_msg_idx,
+                current_step - 1,
                 username,
                 my_last_message
             )
@@ -409,16 +475,18 @@ class HelloTalkBot:
                 return True
             
             if alternative_message:
-                next_message = alternative_message
-                print(f"      🔄 커스텀 메시지 사용")
-            elif next_step is not None and next_step < len(self.messages):
+                print(f"      📤 Acknowledgment: \"{alternative_message[:50]}...\"")
+                self.send_message(alternative_message)
+                time.sleep(1)
+            
+            if next_step is not None and next_step < len(self.messages):
                 next_message = self.messages[next_step]
-                print(f"      📤 step {next_step} 메시지 전송")
+                print(f"      📤 Step {next_step} 메시지 전송")
             else:
-                next_step_fallback = current_last_msg_idx + 1
-                if next_step_fallback < len(self.messages):
-                    next_message = self.messages[next_step_fallback]
-                    print(f"      ⚠️  패턴 매칭 실패 → step {next_step_fallback} 메시지로 진행")
+                next_step = current_step
+                if next_step < len(self.messages):
+                    next_message = self.messages[next_step]
+                    print(f"      ⚠️  패턴 매칭 실패 → step {next_step} 메시지로 진행")
                 else:
                     print(f"      ✅ 모든 메시지 전송 완료")
                     state['completed'] = True
@@ -427,9 +495,9 @@ class HelloTalkBot:
             success = self.send_message(next_message)
             if success:
                 actions_taken += 1
+                state['current_step'] = next_step + 1
                 
-                new_last_idx = self.get_my_last_message_index()
-                if new_last_idx >= len(self.messages) - 1:
+                if state['current_step'] >= len(self.messages):
                     state['completed'] = True
                     print(f"      ✅ 대화 완료!")
                 

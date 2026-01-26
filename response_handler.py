@@ -236,14 +236,9 @@ class ResponseHandler:
                     final_msg = acknowledgment if acknowledgment else alternative_msg
                     return -1, final_msg, should_save_feedback
                 
-                # acknowledgment이 있으면 다음 step 메시지와 합치기
-                if acknowledgment and next_idx is not None and next_idx >= 0:
-                    next_step_msg = self.get_message_by_index(next_idx)
-                    if next_step_msg:
-                        combined_msg = f"{acknowledgment} {next_step_msg}"
-                        return next_idx, combined_msg, should_save_feedback
+                if acknowledgment:
+                    return next_idx, acknowledgment, should_save_feedback
                 
-                # alternative_message가 있으면 그대로 사용
                 if alternative_msg:
                     return next_idx, alternative_msg, should_save_feedback
                 
@@ -306,10 +301,7 @@ class ResponseHandler:
                 print(f"   ✓ 유저 시작 패턴 매칭: {pattern_type}")
                 
                 if acknowledgment:
-                    next_step_msg = self.get_message_by_index(next_idx)
-                    if next_step_msg:
-                        combined_msg = f"{acknowledgment} {next_step_msg}"
-                        return combined_msg, next_idx + 1
+                    return acknowledgment, next_idx
                 
                 return response if response else acknowledgment, next_idx
         
@@ -319,10 +311,7 @@ class ResponseHandler:
         next_idx = general.get('next_message_index', 0)
         
         if acknowledgment:
-            next_step_msg = self.get_message_by_index(next_idx)
-            if next_step_msg:
-                combined_msg = f"{acknowledgment} {next_step_msg}"
-                return combined_msg, next_idx + 1
+            return acknowledgment, next_idx
         
         return response if response else "Hi! Nice to meet you!", next_idx
     
