@@ -222,6 +222,7 @@ class ResponseHandler:
             
             if self.check_keywords(user_message, keywords):
                 next_idx = response_data.get('next_message_index')
+                acknowledgment = response_data.get('acknowledgment')
                 alternative_msg = response_data.get('alternative_message')
                 skip_to_end = response_data.get('skip_to_end', False)
                 should_save_feedback = response_data.get('save_feedback', False)
@@ -232,9 +233,21 @@ class ResponseHandler:
                     self.save_feedback(username, current_step, user_message, my_last_message, response_type)
                 
                 if skip_to_end:
-                    return -1, alternative_msg, should_save_feedback
+                    final_msg = acknowledgment if acknowledgment else alternative_msg
+                    return -1, final_msg, should_save_feedback
                 
-                return next_idx, alternative_msg, should_save_feedback
+                # acknowledgment이 있으면 다음 step 메시지와 합치기
+                if acknowledgment and next_idx is not None and next_idx >= 0:
+                    next_step_msg = self.get_message_by_index(next_idx)
+                    if next_step_msg:
+                        combined_msg = f"{acknowledgment} {next_step_msg}"
+                        return next_idx, combined_msg, should_save_feedback
+                
+                # alternative_message가 있으면 그대로 사용
+                if alternative_msg:
+                    return next_idx, alternative_msg, should_save_feedback
+                
+                return next_idx, None, should_save_feedback
         
         # Fallback 응답 체크
         fallback_responses = self.patterns.get('fallback_responses', {})
@@ -287,13 +300,31 @@ class ResponseHandler:
                 
             keywords = pattern_data.get('keywords', [])
             if self.check_keywords(user_message, keywords):
-                response = pattern_data.get('response', '')
+                acknowledgment = pattern_data.get('acknowledgment')
+                response = pattern_data.get('response')
                 next_idx = pattern_data.get('next_message_index', 0)
                 print(f"   ✓ 유저 시작 패턴 매칭: {pattern_type}")
-                return response, next_idx
+                
+                if acknowledgment:
+                    next_step_msg = self.get_message_by_index(next_idx)
+                    if next_step_msg:
+                        combined_msg = f"{acknowledgment} {next_step_msg}"
+                        return combined_msg, next_idx + 1
+                
+                return response if response else acknowledgment, next_idx
         
         general = user_initiated_patterns.get('general', {})
-        return general.get('response', "Hi! Nice to meet you!"), general.get('next_message_index', 0)
+        acknowledgment = general.get('acknowledgment')
+        response = general.get('response')
+        next_idx = general.get('next_message_index', 0)
+        
+        if acknowledgment:
+            next_step_msg = self.get_message_by_index(next_idx)
+            if next_step_msg:
+                combined_msg = f"{acknowledgment} {next_step_msg}"
+                return combined_msg, next_idx + 1
+        
+        return response if response else "Hi! Nice to meet you!", next_idx
     
     def get_unhandled_stats(self) -> Dict:
         """

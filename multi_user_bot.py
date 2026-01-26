@@ -293,9 +293,11 @@ class HelloTalkBot:
                 return -1
             
             last_text = text_wrapper.inner_text().strip()
+            last_text_lower = last_text.lower()
             
             for idx, template_msg in enumerate(self.messages):
-                if last_text == template_msg or template_msg in last_text:
+                template_lower = template_msg.lower()
+                if last_text_lower == template_lower or template_lower in last_text_lower:
                     print(f"      내가 마지막으로 보낸 메시지: \"{last_text[:50]}...\" (메시지 {idx + 1})")
                     return idx
             
@@ -311,157 +313,136 @@ class HelloTalkBot:
         user['element'].click()
         time.sleep(2)
         
-        last_msg_idx = self.get_my_last_message_index()
-        has_new_reply = self.has_reply_after_my_last_message()
-        
         if username not in self.user_states:
             self.user_states[username] = {
-                'current_step': max(0, last_msg_idx + 1),
                 'completed': False,
                 'last_check_time': datetime.now().isoformat(),
                 'messages_processed': []
             }
-            
-            if last_msg_idx >= 0:
-                print(f"   ℹ️  이미 메시지 {last_msg_idx + 1}/{len(self.messages)} 전송됨")
-        else:
-            if last_msg_idx >= 0 and last_msg_idx + 1 != self.user_states[username]['current_step']:
-                print(f"   ⚠️  상태 불일치 감지! 저장된 단계: {self.user_states[username]['current_step']}, 실제: {last_msg_idx + 1}")
-                print(f"   🔄 실제 상태로 업데이트...")
-                self.user_states[username]['current_step'] = last_msg_idx + 1
-                self.save_state()
         
         state = self.user_states[username]
         
-        if state['completed']:
+        if state.get('completed'):
+            return False
+        
+        last_msg_idx = self.get_my_last_message_index()
+        
+        if last_msg_idx >= 0:
+            print(f"   ℹ️  마지막 bot 메시지: step {last_msg_idx} - \"{self.messages[last_msg_idx][:50]}...\"")
+        
+        if last_msg_idx >= len(self.messages) - 1:
+            print(f"   ✅ 모든 메시지 전송 완료")
+            state['completed'] = True
+            self.save_state()
             return False
         
         new_messages = self.get_all_new_received_messages(username)
         
-        if state['current_step'] == 0 and new_messages:
-            first_msg_text = new_messages[0]['text']
-            print(f"   🔍 첫 메시지 감지됨: \"{first_msg_text[:50]}...\"")
-            
-            difficulty_keywords = ["grammar", "pronunciation", "listening", "speaking", "reading", "writing", 
-                                 "vocabulary", "particles", "verb", "hard", "difficult", "batchim", "diphthong", 
-                                 "memorizing", "time", "getting time", "where do i start", "can u help", "help me"]
-            
-            mentions_difficulty = any(keyword in first_msg_text.lower() for keyword in difficulty_keywords)
-            
-            if mentions_difficulty:
-                print(f"   ⚠️  이미 어려움 언급 → 이전 대화 있었음 추정")
-                print(f"   ⏩ 바로 2단계(직업 질문)로 진입")
-                
-                next_step, alt_msg, _ = self.response_handler.analyze_response(
-                    first_msg_text, 1, username, self.messages[1]
-                )
-                
-                if alt_msg:
-                    response = alt_msg
-                elif next_step is not None and next_step < len(self.messages):
-                    response = self.messages[next_step]
-                else:
-                    response = self.messages[2]
-                
-                success = self.send_message(response)
-                if success:
-                    state['current_step'] = 3
-                    state['messages_processed'].append(new_messages[0]['hash'])
-                    state['last_check_time'] = datetime.now().isoformat()
-                    self.save_state()
-                    return True
-        
         user_initiated, first_msg = self.detect_user_initiated_conversation()
         
-        if user_initiated and state['current_step'] == 0 and not new_messages:
+        if user_initiated and last_msg_idx == -1:
             print(f"   🆕 유저가 먼저 대화 시작: \"{first_msg[:50]}...\"")
             response, next_idx = self.response_handler.analyze_user_initiated_message(first_msg)
             print(f"   📤 적절한 첫 응답 전송")
             success = self.send_message(response)
             if success:
-                state['current_step'] = next_idx + 1
                 state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
-                self.save_state()
-                return True
-        
-        if state['current_step'] == 0 and not user_initiated and not new_messages:
-            print(f"   📤 첫 메시지 전송: {username}")
-            success = self.send_message(self.messages[0])
-            if success:
-                state['current_step'] = 1
                 state['last_check_time'] = datetime.now().isoformat()
                 self.save_state()
                 return True
+            return False
         
-        if new_messages:
-            print(f"   ✓ 새 메시지 {len(new_messages)}개 발견")
-            actions_taken = 0
-            
-            for msg_idx, msg_data in enumerate(new_messages, 1):
-                user_reply = msg_data['text']
-                msg_hash = msg_data['hash']
-                
-                print(f"\n   [{msg_idx}/{len(new_messages)}] 메시지 처리:")
-                print(f"      답변: \"{user_reply[:50]}...\"")
-                
-                if state['current_step'] < len(self.messages):
-                    my_last_message = self.messages[state['current_step'] - 1] if state['current_step'] > 0 else ""
-                    
-                    next_step, alternative_message, _ = self.response_handler.analyze_response(
-                        user_reply, 
-                        state['current_step'] - 1,
-                        username,
-                        my_last_message
-                    )
-                    
-                    state['messages_processed'].append(msg_hash)
-                    
-                    if next_step == -1:
-                        print(f"      🏁 대화 종료 신호")
-                        if alternative_message:
-                            print(f"      📤 종료 메시지 전송")
-                            self.send_message(alternative_message)
-                        state['completed'] = True
-                        state['last_check_time'] = datetime.now().isoformat()
-                        self.save_state()
-                        return True
-                    
-                    if alternative_message:
-                        next_message = alternative_message
-                        print(f"      🔄 대체 메시지 사용")
-                    elif next_step is not None and next_step < len(self.messages):
-                        next_message = self.messages[next_step]
-                    else:
-                        next_message = self.messages[state['current_step']]
-                    
-                    print(f"      📤 응답 전송 (단계: {state['current_step']} → {next_step if next_step is not None else state['current_step'] + 1})")
-                    
-                    success = self.send_message(next_message)
-                    if success:
-                        if next_step is not None:
-                            state['current_step'] = next_step + 1
-                        else:
-                            state['current_step'] += 1
-                        
-                        if state['current_step'] >= len(self.messages):
-                            state['completed'] = True
-                            print(f"      ✅ 대화 완료!")
-                        
-                        actions_taken += 1
-                        
-                        if msg_idx < len(new_messages):
-                            print(f"      ⏸️  다음 메시지 처리 전 3초 대기...")
-                            time.sleep(3)
-            
-            state['last_check_time'] = datetime.now().isoformat()
-            self.save_state()
-            
-            if actions_taken > 0:
-                print(f"   ✅ {actions_taken}개 메시지 처리 완료")
+        if last_msg_idx == -1 and not user_initiated:
+            print(f"   📤 첫 메시지 전송: {username}")
+            success = self.send_message(self.messages[0])
+            if success:
+                state['last_check_time'] = datetime.now().isoformat()
+                self.save_state()
                 return True
-        else:
-            if state['current_step'] > 0 and state['current_step'] < len(self.messages):
-                print(f"   ⏳ 답장 대기 중... (메시지 {state['current_step']}/{len(self.messages)} 전송 완료)")
+            return False
+        
+        if not new_messages:
+            if last_msg_idx >= 0 and last_msg_idx < len(self.messages) - 1:
+                print(f"   ⏳ 답장 대기 중...")
+            return False
+        
+        print(f"   ✓ 새 메시지 {len(new_messages)}개 발견")
+        actions_taken = 0
+        
+        for msg_idx, msg_data in enumerate(new_messages, 1):
+            user_reply = msg_data['text']
+            msg_hash = msg_data['hash']
+            
+            print(f"\n   [{msg_idx}/{len(new_messages)}] 메시지 처리:")
+            print(f"      답변: \"{user_reply[:50]}...\"")
+            
+            current_last_msg_idx = self.get_my_last_message_index()
+            
+            if current_last_msg_idx == -1:
+                print(f"      ⚠️  bot 메시지를 찾을 수 없음")
+                continue
+            
+            if current_last_msg_idx >= len(self.messages) - 1:
+                print(f"      ✅ 이미 모든 메시지 전송 완료")
+                state['completed'] = True
+                break
+            
+            my_last_message = self.messages[current_last_msg_idx]
+            
+            next_step, alternative_message, _ = self.response_handler.analyze_response(
+                user_reply, 
+                current_last_msg_idx,
+                username,
+                my_last_message
+            )
+            
+            state['messages_processed'].append(msg_hash)
+            
+            if next_step == -1:
+                print(f"      🏁 대화 종료 신호")
+                if alternative_message:
+                    print(f"      📤 종료 메시지 전송")
+                    self.send_message(alternative_message)
+                state['completed'] = True
+                state['last_check_time'] = datetime.now().isoformat()
+                self.save_state()
+                return True
+            
+            if alternative_message:
+                next_message = alternative_message
+                print(f"      🔄 커스텀 메시지 사용")
+            elif next_step is not None and next_step < len(self.messages):
+                next_message = self.messages[next_step]
+                print(f"      📤 step {next_step} 메시지 전송")
+            else:
+                next_step_fallback = current_last_msg_idx + 1
+                if next_step_fallback < len(self.messages):
+                    next_message = self.messages[next_step_fallback]
+                    print(f"      ⚠️  패턴 매칭 실패 → step {next_step_fallback} 메시지로 진행")
+                else:
+                    print(f"      ✅ 모든 메시지 전송 완료")
+                    state['completed'] = True
+                    break
+            
+            success = self.send_message(next_message)
+            if success:
+                actions_taken += 1
+                
+                new_last_idx = self.get_my_last_message_index()
+                if new_last_idx >= len(self.messages) - 1:
+                    state['completed'] = True
+                    print(f"      ✅ 대화 완료!")
+                
+                if msg_idx < len(new_messages):
+                    print(f"      ⏸️  다음 메시지 처리 전 3초 대기...")
+                    time.sleep(3)
+        
+        state['last_check_time'] = datetime.now().isoformat()
+        self.save_state()
+        
+        if actions_taken > 0:
+            print(f"   ✅ {actions_taken}개 메시지 처리 완료")
+            return True
         
         return False
     
