@@ -230,24 +230,27 @@ class HelloTalkBot:
             all_messages = self.page.query_selector_all('.msgItemBigWrapper')
             
             if not all_messages:
-                return False, None
+                return False, None, 0
             
             has_bot_message = False
             first_user_message = None
+            user_message_count = 0
             
             for msg in all_messages:
                 if 'sendBox' in msg.get_attribute('class'):
                     has_bot_message = True
                     break
-                elif 'receiveBox' in msg.get_attribute('class') and first_user_message is None:
-                    text_wrapper = msg.query_selector('.textWrapper pre')
-                    if text_wrapper:
-                        first_user_message = text_wrapper.inner_text().strip()
+                elif 'receiveBox' in msg.get_attribute('class'):
+                    user_message_count += 1
+                    if first_user_message is None:
+                        text_wrapper = msg.query_selector('.textWrapper pre')
+                        if text_wrapper:
+                            first_user_message = text_wrapper.inner_text().strip()
             
-            return not has_bot_message and first_user_message is not None, first_user_message
+            return not has_bot_message and first_user_message is not None, first_user_message, user_message_count
         except Exception as e:
             print(f"      ⚠️  대화 감지 실패: {e}")
-            return False, None
+            return False, None, 0
     
     def infer_conversation_step(self, user_message):
         """
@@ -387,28 +390,19 @@ class HelloTalkBot:
         print(f"   ℹ️  현재 step: {current_step}/{len(self.messages)}")
         
         if current_step == 0:
-            user_initiated, first_msg = self.detect_user_initiated_conversation()
+            user_initiated, first_msg, user_msg_count = self.detect_user_initiated_conversation()
             
             if user_initiated:
-                print(f"   🔍 유저가 먼저 대화 시작: \"{first_msg[:50]}...\"")
+                print(f"   🔍 유저가 먼저 대화 시작: \"{first_msg[:50] if first_msg else ''}...\"")
+                print(f"   📊 유저 메시지 수: {user_msg_count}개")
                 
-                # 유저의 첫 메시지로 이미 진행된 대화 단계 파악
-                inferred_step = self.infer_conversation_step(first_msg)
-                
-                if inferred_step > 0:
-                    print(f"   ⚡ 모바일 대화 히스토리 감지: Step {inferred_step - 1}까지 진행된 것으로 추정")
-                    print(f"   📤 Step {inferred_step} 메시지부터 시작")
-                    
-                    success = self.send_message(self.messages[inferred_step])
-                    if success:
-                        state['current_step'] = inferred_step + 1
-                        state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
-                        state['last_check_time'] = datetime.now().isoformat()
-                        self.save_state()
-                        return True
+                if user_msg_count > 1:
+                    print(f"   ⏭️  모바일에서 이미 여러 대화 진행됨 (웹에서는 안 보임) - 메시지 보내지 않음")
+                    state['completed'] = True
+                    self.save_state()
                     return False
                 
-                state['messages_processed'].append(f"{username}:0:{first_msg[:30]}")
+                state['messages_processed'].append(f"{username}:0:{first_msg[:30] if first_msg else ''}")
             
             print(f"   📤 Step {current_step} 메시지 전송")
             success = self.send_message(self.messages[current_step])
