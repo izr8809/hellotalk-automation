@@ -420,77 +420,68 @@ class HelloTalkBot:
             return False
         
         print(f"   ✓ 새 메시지 {len(new_messages)}개 발견")
-        actions_taken = 0
         
-        for msg_idx, msg_data in enumerate(new_messages, 1):
-            user_reply = msg_data['text']
+        for msg_data in new_messages:
             msg_hash = msg_data['hash']
-            
-            print(f"\n   [{msg_idx}/{len(new_messages)}] 메시지 처리:")
-            print(f"      답변: \"{user_reply[:50]}...\"")
-            
-            current_step = state.get('current_step', 0)
-            
-            if current_step >= len(self.messages):
-                print(f"      ✅ 이미 모든 메시지 전송 완료")
-                state['completed'] = True
-                break
-            
-            my_last_message = self.messages[current_step - 1] if current_step > 0 else ""
-            
-            next_step, alternative_message, _ = self.response_handler.analyze_response(
-                user_reply, 
-                current_step - 1,
-                username,
-                my_last_message
-            )
-            
             state['messages_processed'].append(msg_hash)
-            
-            if next_step == -1:
-                print(f"      🏁 대화 종료 신호")
-                if alternative_message:
-                    print(f"      📤 종료 메시지 전송")
-                    self.send_message(alternative_message)
+        
+        last_user_message = new_messages[-1]['text']
+        print(f"   📝 마지막 메시지만 처리: \"{last_user_message[:50]}...\"")
+        
+        current_step = state.get('current_step', 0)
+        
+        if current_step >= len(self.messages):
+            print(f"   ✅ 이미 모든 메시지 전송 완료")
+            state['completed'] = True
+            state['last_check_time'] = datetime.now().isoformat()
+            self.save_state()
+            return False
+        
+        my_last_message = self.messages[current_step - 1] if current_step > 0 else ""
+        
+        next_step, alternative_message, _ = self.response_handler.analyze_response(
+            last_user_message, 
+            current_step - 1,
+            username,
+            my_last_message
+        )
+        
+        if next_step == -1:
+            print(f"   🏁 대화 종료 신호")
+            if alternative_message:
+                print(f"   📤 종료 메시지 전송")
+                self.send_message(alternative_message)
+            state['completed'] = True
+            state['last_check_time'] = datetime.now().isoformat()
+            self.save_state()
+            return True
+        
+        if next_step is not None and next_step < len(self.messages):
+            next_message = self.messages[next_step]
+            print(f"   📤 Step {next_step} 메시지 전송")
+        else:
+            next_step = current_step
+            if next_step < len(self.messages):
+                next_message = self.messages[next_step]
+                print(f"   ⚠️  패턴 매칭 실패 → step {next_step} 메시지로 진행")
+            else:
+                print(f"   ✅ 모든 메시지 전송 완료")
                 state['completed'] = True
                 state['last_check_time'] = datetime.now().isoformat()
                 self.save_state()
-                return True
+                return False
+        
+        success = self.send_message(next_message)
+        if success:
+            state['current_step'] = next_step + 1
             
-            if next_step is not None and next_step < len(self.messages):
-                next_message = self.messages[next_step]
-                print(f"      📤 Step {next_step} 메시지 전송")
-            else:
-                next_step = current_step
-                if next_step < len(self.messages):
-                    next_message = self.messages[next_step]
-                    print(f"      ⚠️  패턴 매칭 실패 → step {next_step} 메시지로 진행")
-                else:
-                    print(f"      ✅ 모든 메시지 전송 완료")
-                    state['completed'] = True
-                    break
-            
-            success = self.send_message(next_message)
-            if success:
-                actions_taken += 1
-                state['current_step'] = next_step + 1
-                
-                if state['current_step'] >= len(self.messages):
-                    state['completed'] = True
-                    print(f"      ✅ 대화 완료!")
-                
-                if msg_idx < len(new_messages):
-                    print(f"      ⏸️  다음 메시지 처리 전 3초 대기...")
-                    time.sleep(3)
+            if state['current_step'] >= len(self.messages):
+                state['completed'] = True
+                print(f"   ✅ 대화 완료!")
         
         state['last_check_time'] = datetime.now().isoformat()
         self.save_state()
-        
-        if actions_taken > 0:
-            print(f"   ✅ {actions_taken}개 메시지 처리 완료")
-            return True
-        
-        return False
+        return True
     
     def run(self):
         print("=" * 60)
