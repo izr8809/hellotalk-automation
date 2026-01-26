@@ -236,12 +236,6 @@ class ResponseHandler:
                     final_msg = acknowledgment if acknowledgment else alternative_msg
                     return -1, final_msg, should_save_feedback
                 
-                if acknowledgment:
-                    return next_idx, acknowledgment, should_save_feedback
-                
-                if alternative_msg:
-                    return next_idx, alternative_msg, should_save_feedback
-                
                 return next_idx, None, should_save_feedback
         
         # Fallback 응답 체크

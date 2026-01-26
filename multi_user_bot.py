@@ -331,28 +331,9 @@ class HelloTalkBot:
             for idx, template_msg in enumerate(self.messages):
                 template_lower = template_msg.lower()
                 
-                if last_text_lower == template_lower or template_lower in last_text_lower:
-                    print(f"      ✓ 마지막 bot 메시지: step {idx}")
+                if last_text_lower == template_lower:
+                    print(f"      ✓ 정확한 매칭: step {idx}")
                     return idx
-            
-            best_match_idx = -1
-            best_match_score = 0
-            
-            for idx, template_msg in enumerate(self.messages):
-                template_words = set(template_msg.lower().split())
-                last_words = set(last_text_lower.split())
-                
-                common_words = template_words & last_words
-                if len(template_words) > 0:
-                    score = len(common_words) / len(template_words)
-                    
-                    if score > best_match_score and score > 0.7:
-                        best_match_score = score
-                        best_match_idx = idx
-            
-            if best_match_idx >= 0:
-                print(f"      ⚠️  부분 매칭: step {best_match_idx} (유사도: {best_match_score:.0%})")
-                return best_match_idx
             
             print(f"      ⚠️  마지막 메시지를 템플릿에서 찾을 수 없음:")
             print(f"      실제 DOM: \"{last_text}\"")
@@ -388,6 +369,14 @@ class HelloTalkBot:
         
         if current_step < 0:
             current_step = 0
+        
+        if current_step == 0:
+            dom_step = self.get_my_last_message_index()
+            if dom_step >= 0:
+                print(f"   🔄 DOM에서 step 복구: state는 0이지만 실제로는 step {dom_step}까지 전송됨")
+                current_step = dom_step + 1
+                state['current_step'] = current_step
+                self.save_state()
         
         if current_step >= len(self.messages):
             print(f"   ✅ 모든 메시지 전송 완료")
@@ -473,11 +462,6 @@ class HelloTalkBot:
                 state['last_check_time'] = datetime.now().isoformat()
                 self.save_state()
                 return True
-            
-            if alternative_message:
-                print(f"      📤 Acknowledgment: \"{alternative_message[:50]}...\"")
-                self.send_message(alternative_message)
-                time.sleep(1)
             
             if next_step is not None and next_step < len(self.messages):
                 next_message = self.messages[next_step]
