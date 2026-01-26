@@ -110,6 +110,29 @@ class HelloTalkBot:
         
         return []
     
+    def get_current_chat_user(self):
+        """현재 열려있는 채팅창의 유저 이름 가져오기"""
+        try:
+            chat_header_selectors = [
+                '.chatHeader .userName',
+                '.chatHeader .name',
+                'div[class*="chatHeader"] span[class*="name"]',
+            ]
+            
+            for selector in chat_header_selectors:
+                try:
+                    name_elem = self.page.query_selector(selector)
+                    if name_elem:
+                        username = name_elem.inner_text().strip()
+                        if username:
+                            return username
+                except:
+                    continue
+            
+            return None
+        except Exception as e:
+            return None
+    
     def get_users_with_unread(self):
         selectors = [
             '.userItem',
@@ -352,8 +375,11 @@ class HelloTalkBot:
     def check_and_send_next_message(self, user):
         username = user['name']
         
-        user['element'].click()
-        time.sleep(2)
+        if user['element']:
+            user['element'].click()
+            time.sleep(2)
+        else:
+            print(f"   ℹ️  이미 열려있는 채팅창")
         
         if username not in self.user_states:
             self.user_states[username] = {
@@ -380,6 +406,16 @@ class HelloTalkBot:
                 current_step = dom_step + 1
                 state['current_step'] = current_step
                 self.save_state()
+            elif dom_step == -1:
+                all_messages = self.page.query_selector_all('.msgItemBigWrapper')
+                bot_messages = self.page.query_selector_all('.msgItemBigWrapper.sendBox')
+                
+                if len(bot_messages) > 0:
+                    print(f"   ⚠️  Bot 메시지 {len(bot_messages)}개 있지만 템플릿과 매칭 안됨")
+                    print(f"   ⏭️  이전 버전 메시지이거나 수정된 메시지 - 스킵")
+                    state['completed'] = True
+                    self.save_state()
+                    return False
         
         if current_step >= len(self.messages):
             print(f"   ✅ 모든 메시지 전송 완료")
@@ -534,6 +570,18 @@ class HelloTalkBot:
                 print(f"[사이클 {cycle}] {current_time}")
                 print(f"{'='*60}")
                 
+                current_chat_user = self.get_current_chat_user()
+                if current_chat_user:
+                    print(f"\n💬 현재 채팅창: {current_chat_user}")
+                    print(f"   → 먼저 체크 (새 메시지가 자동으로 읽음 처리될 수 있음)")
+                    
+                    user_obj = {'name': current_chat_user, 'element': None}
+                    try:
+                        self.check_and_send_next_message(user_obj)
+                        time.sleep(2)
+                    except Exception as e:
+                        print(f"   ❌ 오류: {e}")
+                
                 users_with_unread = self.get_users_with_unread()
                 all_users = self.get_all_users()
                 
@@ -550,13 +598,17 @@ class HelloTalkBot:
                 print(f"읽지 않은 메시지: {len(users_with_unread)}명 | 진행 중: {len(in_progress)}명 | 완료: {len(completed_users)}명 | 신규: {len(not_started_yet)}명")
                 
                 users_to_check = []
-                users_to_check.extend(not_started_yet)
-                users_to_check.extend(in_progress)
                 
-                if not_started_yet:
-                    print(f"\n🆕 신규 유저: {len(not_started_yet)}명")
-                if in_progress:
-                    print(f"🔄 진행 중: {len(in_progress)}명")
+                new_with_unread = [u for u in not_started_yet if u['name'] in unread_names and u['name'] != current_chat_user]
+                in_progress_with_unread = [u for u in in_progress if u['name'] in unread_names and u['name'] != current_chat_user]
+                
+                users_to_check.extend(new_with_unread)
+                users_to_check.extend(in_progress_with_unread)
+                
+                if new_with_unread:
+                    print(f"\n🆕 읽지 않은 메시지 있는 신규 유저: {len(new_with_unread)}명")
+                if in_progress_with_unread:
+                    print(f"🔄 읽지 않은 메시지 있는 진행 중 유저: {len(in_progress_with_unread)}명")
                 
                 if not users_to_check:
                     print("\n✅ 체크할 유저가 없습니다.")
