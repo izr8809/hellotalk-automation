@@ -1,0 +1,250 @@
+[
+  {
+    "timestamp": "2026-01-26T16:48:08.156707",
+    "username": "TestUser",
+    "message_step": 0,
+    "my_message": "test message",
+    "user_response": "asdfasdfasdf",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T16:51:28.588710",
+    "username": "Chi",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "I’m Chee, Not long actually lol I know a few words.",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T16:52:59.752002",
+    "username": "Belle",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Ah I see. Right now, memorizing batchim and diphthongs is the hardest. But I just started - still a long way to go.",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:01:54.422636",
+    "username": "Drei",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "I am a Physical Therapist",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:02:05.791879",
+    "username": "Belle",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "I hold an office job.",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:03:25.565314",
+    "username": "Charlie Miss_masika",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "Oui mais je ne parle pas couramment anglais",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:12:05.349265",
+    "username": "Abigail Watson",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "ㅇ",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:22:08.459004",
+    "username": "Dani",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "So tell me where do I start?",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:22:44.755668",
+    "username": "Shauna",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Getting time",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:23:55.205463",
+    "username": "Ellie",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "I’m a HR with the USA army",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:24:03.630892",
+    "username": "juliette 줄리엣",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "helloo",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:24:05.688766",
+    "username": "Jaira",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "helloo",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:24:30.718659",
+    "username": "Hamazaki flash",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "Just 2 days",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:24:35.283559",
+    "username": "Hamazaki flash",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "I wanna learn korean language can u help me",
+    "analyzed": true
+  },
+  {
+    "timestamp": "2026-01-26T17:33:23.998364",
+    "username": "Hamazaki flash",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "College",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:33:29.676835",
+    "username": "Siyeon",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "Not very at all",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:38:08.698324",
+    "username": "TestUser",
+    "message_step": 0,
+    "my_message": "How long have you been learning?",
+    "user_response": "6 months",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:38:41.518963",
+    "username": "TestUser",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "Grammar is hard",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:38:41.519711",
+    "username": "TestUser",
+    "message_step": 3,
+    "my_message": "I'm building an app to help people learn Korean more easily.You can practice pronunciation for free.",
+    "user_response": "I am a student",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:40:36.374190",
+    "username": "August",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "Yes i think that is better idea. To keep people interested. Otherwise if have to wait another 24 hours they may just not bother with app.",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T17:40:40.960676",
+    "username": "August",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "I use tueida and that lets you do quite a bit before you have to wait. I think your app is really good as natural.",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T18:19:06.386329",
+    "username": "Kate",
+    "message_step": 3,
+    "my_message": "I'm building an app to help people learn Korean more easily. You can practice pronunciation for free.",
+    "user_response": "Administration/Finance",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T18:28:12.608444",
+    "username": "Bev",
+    "message_step": 0,
+    "my_message": "Hi, I'm jake, how long have you been learning Korean?",
+    "user_response": "l don’t have much free time unfortunately",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:03:25.700931",
+    "username": "여신님 女神様 Diosa",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Hm?",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:03:46.002348",
+    "username": "Anita",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "For foreigners is the pronouns important especially in ur language",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:14:08.933649",
+    "username": "Ailen Arteaga Rodriguez",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Not having someone to practice with. And AI is annoying",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:14:18.315208",
+    "username": "Anita",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "I’m a psychiatrist",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:14:33.247281",
+    "username": "여신님 女神様 Diosa",
+    "message_step": 2,
+    "my_message": "what do you do for a living?",
+    "user_response": "I’m a shipfitter/ship builder",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:14:44.757031",
+    "username": "Jazmín Bautista",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Hi, I'm jake, how long have you been learning Korean?",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:25:12.456449",
+    "username": "여신님 女神様 Diosa",
+    "message_step": 3,
+    "my_message": "I'm building an app to help people learn Korean more easily. You can practice pronunciation for free.",
+    "user_response": "Hi Jake, not long I’m teaching myself at the moment",
+    "analyzed": false
+  },
+  {
+    "timestamp": "2026-01-26T19:35:23.427555",
+    "username": "Maha",
+    "message_step": 1,
+    "my_message": "what is the hardest part?",
+    "user_response": "Right now, just sentence structure for me",
+    "analyzed": false
+  }
+]
