@@ -24,6 +24,9 @@ class HelloTalkBot:
         self.llm_handler = LLMHandler()
         self.feedback_file = "feedback_data.json"
         self.hardest_part_file = "hardest_part_answers.json"
+        self.negative_users_file = "negative_users.json"
+        self.contacted_users_file = "contacted_users.json"
+        self.contacted_users = {}  # {username: {date, device, status}}
         
     def load_exclude_users(self, file_path="exclude_users.txt"):
         try:
@@ -36,6 +39,33 @@ class HelloTalkBot:
             print(f"⚠️  {file_path} file not found (sending to all users)")
             self.exclude_users = set()
     
+    def load_contacted_users(self):
+        """이전에 대화한 유저 목록 로드"""
+        try:
+            with open(self.contacted_users_file, 'r', encoding='utf-8') as f:
+                self.contacted_users = json.load(f)
+            print(f"✓ Contacted users loaded ({len(self.contacted_users)} users)")
+        except FileNotFoundError:
+            print("⚠️  No contacted users file, starting fresh.")
+            self.contacted_users = {}
+
+    def save_contacted_user(self, username):
+        """대화한 유저를 contacted 목록에 저장"""
+        if username not in self.contacted_users:
+            self.contacted_users[username] = {
+                "first_contact": datetime.now().isoformat(),
+                "device": "web"
+            }
+            try:
+                with open(self.contacted_users_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.contacted_users, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"   ⚠️  Failed to save contacted user: {e}")
+
+    def is_already_contacted(self, username):
+        """이미 대화한 유저인지 확인"""
+        return username in self.contacted_users
+
     def save_state(self):
         state_file = "bot_state.json"
         state_data = {
@@ -60,6 +90,154 @@ class HelloTalkBot:
         except FileNotFoundError:
             print("⚠️  No previous state, starting fresh.")
             self.user_states = {}
+
+    # === 부정적 유저 감지 및 관리 ===
+
+    # 확실히 거부/거절 의사를 표현한 경우만 감지 (너무 넓게 잡지 않음)
+    NEGATIVE_KEYWORDS = [
+        "stop messaging me", "leave me alone", "don't message me",
+        "go away", "block", "report", "i wish you the best",
+        "not interested in downloading", "i don't want to download",
+    ]
+
+    def detect_negative_response(self, user_message):
+        """유저 메시지가 확실히 거부인지 감지 (너무 민감하게 잡지 않음)"""
+        if not user_message:
+            return False
+        msg_lower = user_message.lower().strip()
+        # 짧은 메시지는 무시 (오탐 방지)
+        if len(msg_lower) < 15:
+            return False
+        return any(kw in msg_lower for kw in self.NEGATIVE_KEYWORDS)
+
+    def save_negative_user(self, username, user_message, context=""):
+        """부정적 유저를 파일에 저장하고 exclude 목록에 추가"""
+        try:
+            # 1. negative_users.json에 저장
+            negative_data = []
+            try:
+                with open(self.negative_users_file, 'r', encoding='utf-8') as f:
+                    negative_data = json.load(f)
+            except FileNotFoundError:
+                pass
+
+            # 이미 등록된 유저인지 확인
+            existing = [u for u in negative_data if u['username'] == username]
+            if not existing:
+                negative_data.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'username': username,
+                    'last_message': user_message,
+                    'context': context,
+                    'reviewed': False,
+                    'action': None  # 나중에 리뷰할 때 결정
+                })
+
+                with open(self.negative_users_file, 'w', encoding='utf-8') as f:
+                    json.dump(negative_data, f, indent=2, ensure_ascii=False)
+
+                print(f"   🚫 Negative user saved: {username}")
+
+            # 2. exclude_users.txt에 자동 추가
+            self.add_to_exclude_list(username)
+
+        except Exception as e:
+            print(f"   ⚠️  Failed to save negative user: {e}")
+
+    def add_to_exclude_list(self, username):
+        """exclude_users.txt에 유저 추가"""
+        exclude_file = "exclude_users.txt"
+        try:
+            existing = set()
+            try:
+                with open(exclude_file, 'r', encoding='utf-8') as f:
+                    existing = {line.strip() for line in f if line.strip() and not line.startswith('#')}
+            except FileNotFoundError:
+                pass
+
+            if username not in existing:
+                with open(exclude_file, 'a', encoding='utf-8') as f:
+                    f.write(f"{username}\n")
+                self.exclude_users.add(username)
+                print(f"   ➕ Added '{username}' to exclude list")
+
+        except Exception as e:
+            print(f"   ⚠️  Failed to add to exclude list: {e}")
+
+    def review_negative_users(self):
+        """부정적 유저 리뷰 - 하나씩 보여주고 처리 방법 결정"""
+        try:
+            with open(self.negative_users_file, 'r', encoding='utf-8') as f:
+                negative_data = json.load(f)
+        except FileNotFoundError:
+            print("No negative users to review.")
+            return
+
+        unreviewed = [u for u in negative_data if not u.get('reviewed')]
+        if not unreviewed:
+            print("All negative users have been reviewed.")
+            return
+
+        print(f"\n{'='*60}")
+        print(f"🔍 NEGATIVE USER REVIEW ({len(unreviewed)} pending)")
+        print(f"{'='*60}\n")
+
+        for i, user in enumerate(unreviewed):
+            print(f"[{i+1}/{len(unreviewed)}] 👤 {user['username']}")
+            print(f"   📅 Date: {user['timestamp'][:10]}")
+            print(f"   💬 Message: \"{user['last_message']}\"")
+            if user.get('context'):
+                print(f"   📝 Context: {user['context']}")
+            print()
+            print(f"   Options:")
+            print(f"     1) Keep excluded (don't message again)")
+            print(f"     2) Remove from exclude (try again later)")
+            print(f"     3) Skip for now")
+            print()
+
+            choice = input(f"   Choice (1/2/3): ").strip()
+
+            if choice == '1':
+                user['reviewed'] = True
+                user['action'] = 'keep_excluded'
+                print(f"   ✓ '{user['username']}' will stay excluded")
+            elif choice == '2':
+                user['reviewed'] = True
+                user['action'] = 'removed_from_exclude'
+                # exclude_users.txt에서 제거
+                self.remove_from_exclude_list(user['username'])
+                print(f"   ✓ '{user['username']}' removed from exclude list")
+            elif choice == '3':
+                print(f"   ⏭️  Skipped")
+            else:
+                print(f"   ⏭️  Invalid choice, skipped")
+            print()
+
+        # 결과 저장
+        with open(self.negative_users_file, 'w', encoding='utf-8') as f:
+            json.dump(negative_data, f, indent=2, ensure_ascii=False)
+
+        print(f"{'='*60}")
+        print(f"✓ Review complete!")
+        print(f"{'='*60}\n")
+
+    def remove_from_exclude_list(self, username):
+        """exclude_users.txt에서 유저 제거"""
+        exclude_file = "exclude_users.txt"
+        try:
+            lines = []
+            with open(exclude_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            with open(exclude_file, 'w', encoding='utf-8') as f:
+                for line in lines:
+                    if line.strip() != username:
+                        f.write(line)
+
+            self.exclude_users.discard(username)
+            print(f"   ➖ Removed '{username}' from exclude list")
+        except Exception as e:
+            print(f"   ⚠️  Failed to remove from exclude list: {e}")
 
     def save_feedback(self, username, user_message, llm_response, correct_response):
         """Save feedback data for prompt improvement"""
@@ -135,13 +313,15 @@ class HelloTalkBot:
     def should_exclude_user(self, name):
         if name in self.exclude_users:
             return True
-        
+        if self.is_already_contacted(name):
+            return True
+
         name_lower = name.lower()
         if 'ht ' in name_lower or name_lower.startswith('ht'):
             return True
         if 'hellotalk' in name_lower:
             return True
-        
+
         return False
     
     def get_all_users(self):
@@ -220,7 +400,7 @@ class HelloTalkBot:
                             unread_badge = elem.query_selector('.newMsgCount')
                             if not unread_badge:
                                 continue
-                            
+
                             username = elem.query_selector('.userName')
                             if username:
                                 name = username.inner_text().strip()
@@ -230,7 +410,7 @@ class HelloTalkBot:
                                     else:
                                         unread_count_elem = unread_badge.query_selector('span')
                                         unread_count = unread_count_elem.inner_text().strip() if unread_count_elem else '?'
-                                        
+
                                         users_with_unread.append({
                                             'element': elem,
                                             'name': name,
@@ -241,9 +421,11 @@ class HelloTalkBot:
                     
                     if users_with_unread:
                         print(f"✓ Unread messages: {len(users_with_unread)} users (excluded: {excluded_count})")
+                        for u in users_with_unread:
+                            print(f"   📩 {u['name']} ({u['unread_count']} unread)")
                         return users_with_unread
                     else:
-                        print(f"✓ No users with unread messages")
+                        print(f"✓ No users with unread messages (checked {len(elements)} users, excluded: {excluded_count})")
                         return []
             except:
                 continue
@@ -357,26 +539,33 @@ class HelloTalkBot:
     def detect_user_initiated_conversation(self):
         try:
             all_messages = self.page.query_selector_all('.msgItemBigWrapper')
-            
+
             if not all_messages:
                 return False, None, 0
-            
+
             has_bot_message = False
             first_user_message = None
-            user_message_count = 0
-            
+            text_message_count = 0  # 텍스트 메시지만 카운트 (스티커 제외)
+
             for msg in all_messages:
                 if 'sendBox' in msg.get_attribute('class'):
                     has_bot_message = True
                     break
                 elif 'receiveBox' in msg.get_attribute('class'):
-                    user_message_count += 1
-                    if first_user_message is None:
-                        text_wrapper = msg.query_selector('.textWrapper pre')
-                        if text_wrapper:
-                            first_user_message = text_wrapper.inner_text().strip()
-            
-            return not has_bot_message and first_user_message is not None, first_user_message, user_message_count
+                    text_wrapper = msg.query_selector('.textWrapper pre')
+                    if text_wrapper:
+                        text = text_wrapper.inner_text().strip()
+                        if text:
+                            text_message_count += 1
+                            if first_user_message is None:
+                                first_user_message = text
+                    # 스티커/이미지 등 텍스트 없는 메시지는 카운트하지 않음
+
+            # 스티커만 있는 경우 (텍스트 0개) → 새 대화로 취급
+            if not has_bot_message and text_message_count == 0:
+                return False, None, 0
+
+            return not has_bot_message and first_user_message is not None, first_user_message, text_message_count
         except Exception as e:
             print(f"      ⚠️  Failed to detect conversation: {e}")
             return False, None, 0
@@ -395,12 +584,17 @@ class HelloTalkBot:
                 print(f"📥 (Starting new conversation)")
             print(f"\n📤 Bot will send: \"{message}\"")
             print(f"{'='*60}")
-            print(f"Press ENTER to send as-is, type 'skip' to cancel, or type corrected message: ", end='', flush=True)
+            print(f"Press ENTER to send as-is, 'skip' to cancel, 'negative' to block user, or type corrected message: ", end='', flush=True)
 
             user_input = input().strip()
 
             if user_input.lower() == 'skip':
                 print(f"   ⏭️  Message cancelled by user")
+                return False
+
+            if user_input.lower() == 'negative':
+                print(f"   🚫 Marking '{username}' as negative user")
+                self.save_negative_user(username, user_last_message or "", context="manually marked during review")
                 return False
 
             # If user provided feedback, use it as the message and save for learning
@@ -454,6 +648,29 @@ class HelloTalkBot:
         if user['element']:
             user['element'].click()
             time.sleep(2)
+
+            # 채팅 전환 확인
+            actual_user = self.get_current_chat_user()
+            if actual_user and actual_user != username:
+                print(f"   ⚠️  Chat didn't switch (expected: {username}, got: {actual_user})")
+                # 한번 더 시도
+                user['element'].click()
+                time.sleep(2)
+                actual_user = self.get_current_chat_user()
+                if actual_user and actual_user != username:
+                    print(f"   ❌ Chat switch failed, skipping")
+                    return False
+
+            # 최신 메시지 보이도록 스크롤
+            try:
+                chat_area = self.page.query_selector('.msgListWrapper') or \
+                            self.page.query_selector('.chatMsgList') or \
+                            self.page.query_selector('[class*="msgList"]')
+                if chat_area:
+                    chat_area.evaluate('el => el.scrollTop = el.scrollHeight')
+                    time.sleep(0.5)
+            except:
+                pass
         else:
             print(f"   ℹ️  Already open chat window")
 
@@ -516,6 +733,7 @@ class HelloTalkBot:
             success = self.send_message(response, username, user_last_msg)
             if success:
                 state['started'] = True
+                self.save_contacted_user(username)
                 if is_end:
                     state['completed'] = True
                     self.llm_handler.mark_conversation_ended(username)
@@ -525,22 +743,37 @@ class HelloTalkBot:
                 return True
             return False
 
-        # 진행 중인 대화: 새 메시지 확인
-        new_messages = self.get_all_new_received_messages(username)
-
-        if not new_messages:
-            print(f"   ⏳ Waiting for reply...")
+        # 진행 중인 대화: 마지막 메시지가 유저인지 확인
+        if not full_conversation:
+            print(f"   ⏳ No conversation on screen")
             return False
 
-        print(f"   ✓ Found {len(new_messages)} new messages")
+        last_msg = full_conversation[-1]
+        if last_msg['role'] == 'assistant':
+            print(f"   ⏳ Waiting for reply... (last msg is bot)")
+            return False
 
-        # Mark messages as processed
-        for msg_data in new_messages:
-            state['messages_processed'].append(msg_data['hash'])
+        # 이미 처리한 메시지인지 확인
+        last_user_text = last_msg['content'][:50]
+        last_msg_key = f"{username}:last:{last_user_text}"
+        if last_msg_key == state.get('last_processed_msg'):
+            print(f"   ⏳ Already processed this message")
+            return False
 
-        # Show all messages for context display
-        all_messages_text = " | ".join([msg['text'] for msg in new_messages])
-        print(f"   📝 All new messages: \"{all_messages_text[:100]}...\"")
+        print(f"   ✓ New user message detected: \"{last_user_text}...\"")
+
+        # Collect user messages after last bot message
+        all_messages_text = last_msg['content']
+        new_messages = self.get_all_new_received_messages(username)
+        if new_messages:
+            for msg_data in new_messages:
+                state['messages_processed'].append(msg_data['hash'])
+            all_messages_text = " | ".join([msg['text'] for msg in new_messages])
+        print(f"   📝 User message: \"{all_messages_text[:100]}...\"")
+
+        # Check for negative response - save silently, continue conversation
+        if self.detect_negative_response(all_messages_text):
+            self.save_negative_user(username, all_messages_text, context="auto-detected during conversation")
 
         # Re-read full conversation from screen
         full_conversation = self.get_full_conversation_from_screen()
@@ -568,16 +801,57 @@ class HelloTalkBot:
             self.llm_handler.mark_conversation_ended(username)
             print(f"   🏁 Conversation completed!")
 
+        if success:
+            state['last_processed_msg'] = last_msg_key
         state['last_check_time'] = datetime.now().isoformat()
         self.save_state()
         return success
-    
+
+    def print_daily_stats(self):
+        """오늘 통계 출력"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        total_completed = 0
+        today_completed = 0
+        today_contacted = 0
+        today_completed_names = []
+
+        for name, state in self.user_states.items():
+            if name.endswith('_ended'):
+                continue
+            if state.get('completed'):
+                total_completed += 1
+                check_time = state.get('last_check_time', '')
+                if check_time.startswith(today):
+                    today_completed += 1
+                    today_completed_names.append(name)
+
+        for name, info in self.contacted_users.items():
+            contact_time = info.get('first_contact', '')
+            if contact_time.startswith(today):
+                today_contacted += 1
+
+        ongoing = sum(1 for name, s in self.user_states.items()
+                      if not name.endswith('_ended')
+                      and s.get('started') and not s.get('completed'))
+
+        print(f"\n{'='*60}")
+        print(f"📊 TODAY ({today}) STATS")
+        print(f"{'='*60}")
+        print(f"   🆕 Contacted today: {today_contacted}")
+        print(f"   💬 Ongoing: {ongoing}")
+        print(f"   ✅ Completed today: {today_completed}")
+        print(f"   🏆 Total completed (all time): {total_completed}")
+        if today_completed_names:
+            print(f"   📋 Completed: {', '.join(today_completed_names)}")
+        print(f"{'='*60}")
+
     def run(self):
         print("=" * 60)
         print("HelloTalk Multi-User Bot (LLM)")
         print("=" * 60)
 
         self.load_exclude_users()
+        self.load_contacted_users()
         self.load_state()
 
         # Check Ollama status
@@ -621,147 +895,59 @@ class HelloTalkBot:
             print("🚀 Bot started!")
             print("=" * 60)
             print(f"LLM model: {self.llm_handler.model}")
-            print(f"Check interval: 10 minutes")
             print("Stop: Ctrl + C\n")
-            
+
             cycle = 0
-            
+
             while True:
                 cycle += 1
                 current_time = datetime.now().strftime("%H:%M:%S")
                 print(f"\n{'='*60}")
                 print(f"[Cycle {cycle}] {current_time}")
                 print(f"{'='*60}")
-                
+
+                # 현재 열려있는 채팅 먼저 처리
                 current_chat_user = self.get_current_chat_user()
                 if current_chat_user:
                     print(f"\n💬 Current chat: {current_chat_user}")
-                    print(f"   → Check first (new messages may be auto-marked as read)")
-
                     user_obj = {'name': current_chat_user, 'element': None}
                     try:
                         self.check_and_send_next_message(user_obj)
                         time.sleep(2)
                     except Exception as e:
                         print(f"   ❌ Error: {e}")
-                
-                # Get users with unread messages (red badge)
+
+                # unread 뱃지 있는 유저만 체크
                 users_with_unread = self.get_users_with_unread()
-
-                # Get all users to find new ones
-                all_users = self.get_all_users()
-
-                if not all_users:
-                    print("⚠️  User list not found.")
-                    time.sleep(60)
-                    continue
-
-                # Create unread_names set
-                unread_names = {u['name'] for u in users_with_unread}
-
-                # Find users to check
-                users_to_check = []
-
-                # 1. Add users with unread messages (priority)
-                unread_to_check = [u for u in users_with_unread if u['name'] != current_chat_user]
-                users_to_check.extend(unread_to_check)
-
-                # 2. Add up to 5 new users to start conversations
-                NEW_USERS_PER_CYCLE = 5
-                not_started = [u for u in all_users if u['name'] not in self.user_states and u['name'] != current_chat_user]
-                new_users_to_start = not_started[:NEW_USERS_PER_CYCLE]
-
-                # Don't duplicate users already in unread list
-                for user in new_users_to_start:
-                    if user['name'] not in [u['name'] for u in users_to_check]:
-                        users_to_check.append(user)
+                users_to_check = [u for u in users_with_unread if u['name'] != current_chat_user]
 
                 if not users_to_check:
-                    print("✅ No users to check this cycle.")
-                    print(f"\n⏳ Waiting 600 seconds (10 minutes) until next check...")
-                    time.sleep(600)
-                    continue
-
-                # Show stats
-                unread_count = len(unread_to_check)
-                new_count = len([u for u in users_to_check if u['name'] not in self.user_states])
-                ongoing_count = len([u for u in users_to_check if u['name'] in self.user_states and not self.user_states[u['name']].get('completed')])
-
-                print(f"\n📬 Checking {len(users_to_check)} users this cycle:")
-                if unread_count:
-                    print(f"   📩 With unread messages: {unread_count}")
-                if new_count:
-                    print(f"   🆕 New conversations to start: {new_count}")
-                if ongoing_count:
-                    print(f"   💬 Ongoing: {ongoing_count}")
-                
-                if not users_to_check:
-                    print("\n✅ No users to check.")
-                    print(f"\n⏳ Waiting 600 seconds (10 minutes) until next check...")
-                    time.sleep(600)
-                    continue
-
-                print(f"\n🔄 Starting sweep of {len(users_to_check)} users:")
-                
-                BATCH_SIZE = 30
-                total_actions = 0
-                
-                for batch_num in range(0, len(users_to_check), BATCH_SIZE):
-                    batch = users_to_check[batch_num:batch_num + BATCH_SIZE]
-                    batch_actions = 0
-
-                    batch_label = f"Batch {batch_num//BATCH_SIZE + 1}/{(len(users_to_check) + BATCH_SIZE - 1)//BATCH_SIZE}"
-                    print(f"\n{'='*60}")
-                    print(f"📦 {batch_label}: Processing {len(batch)} users")
-                    print(f"{'='*60}")
-                    
-                    for idx, user in enumerate(batch, 1):
+                    print("✅ No new messages.")
+                else:
+                    print(f"\n📩 {len(users_to_check)} users with new messages:")
+                    total_actions = 0
+                    for idx, user in enumerate(users_to_check, 1):
                         username = user['name']
+                        print(f"\n[{idx}/{len(users_to_check)}] 📩 {username} ({user.get('unread_count', '?')} unread)")
 
-                        is_new = username not in self.user_states
-                        if is_new:
-                            status_label = "🆕 New"
-                        else:
-                            state = self.user_states.get(username, {'current_step': 0})
-                            has_unread = username in unread_names
-                            unread_indicator = "🔴" if has_unread else "⚪"
-                            status_label = f"{unread_indicator} In-progress"
-
-                        started = self.user_states.get(username, {}).get('started', False)
-                        global_idx = batch_num + idx
-                        status_text = "In conversation" if started else "New"
-                        print(f"\n[{global_idx}/{len(users_to_check)}] {status_label} | {username} ({status_text})")
-                        
                         try:
                             action = self.check_and_send_next_message(user)
                             if action:
-                                batch_actions += 1
+                                total_actions += 1
                             time.sleep(2)
                         except Exception as e:
                             print(f"   ❌ Error: {e}")
                             import traceback
                             traceback.print_exc()
                             continue
-                    
-                    total_actions += batch_actions
 
                     print(f"\n{'='*60}")
-                    print(f"✅ {batch_label} completed: {len(batch)} users checked, {batch_actions} actions")
+                    print(f"✅ Cycle {cycle} done: {len(users_to_check)} checked, {total_actions} actions")
                     print(f"{'='*60}")
 
-                    if batch_num + BATCH_SIZE < len(users_to_check):
-                        remaining = len(users_to_check) - (batch_num + BATCH_SIZE)
-                        print(f"\n⏸️  Brief pause... (remaining users: {remaining})")
-                        print(f"⏳ Starting next batch in 30 seconds...")
-                        time.sleep(30)
-
-                print(f"\n{'='*60}")
-                print(f"🎉 Sweep completed!")
-                print(f"Total {len(users_to_check)} users checked, {total_actions} actions")
-                print(f"{'='*60}")
-
-                print(f"\n⏳ Waiting 600 seconds (10 minutes) until next cycle...")
-                time.sleep(600)
+                self.print_daily_stats()
+                print(f"\n⏳ Waiting 100 seconds until next cycle...")
+                time.sleep(100)
         
         except KeyboardInterrupt:
             print("\n\n⚠️  User interrupted.")
